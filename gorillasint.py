@@ -2,7 +2,9 @@ import argparse
 import subprocess
 import re
 import os
-
+import sys
+import threading
+import time
 
 def print_ascii_art():
     art = """
@@ -28,29 +30,68 @@ def print_ascii_art():
         ⢸⣿⣷⣤⣠⣬⣿⣿⣿⡟⠀⠀⠘⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⡿⠀⠀⠈⢻⣿⣿⣿⣿⣿⣿⡄⠀⢹⡇⠀⠀
         ⠀⢿⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠹⣿⣿⣿⣿⣿⣿⣷⠀⠀⠀⢘⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠙⣿⣿⣿⣿⣿⣧⠀⢸⣷⠀⠀    
           ⠀⠸⣿⣿⣿⣿⣿⣿⣿⣿⣶⡄⠀⠀⢻⣿⣿⣿⣿⣿⣿⣷⡄⢸⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣤⣴⡿⠃⠀
-  ____            _ _ _       ____  _       _                 
- / ___| ___  _ __(_) | | __ _/ ___|(_)_ __ | |_   _ __  _   _ 
-| |  _ / _ \| '__| | | |/ _` \___ \| | '_ \| __| | '_ \| | | |
-| |_| | (_) | |  | | | | (_| |___) | | | | | |_ _| |_) | |_| |
- \____|\___/|_|  |_|_|_|\__,_|____/|_|_| |_|\__(_) .__/ \__, |
-                                                 |_|    |___/ 
-
+           ________         _ _ _          _______ _____ _   _ _________  
+          / / __ \ \       (_) | |        / / ____|_   _| \ | |__   __\ \ 
+   __ _  | | |  | | |  _ __ _| | | __ _  | | (___   | | |  \| |  | |   | |
+  / _` | | | |  | | | | '__| | | |/ _` | | |\___ \  | | | . ` |  | |   | |
+ | (_| | | | |__| | | | |  | | | | (_| | | |____) |_| |_| |\  |  | |   | |
+  \__, | | |\____/| | |_|  |_|_|_|\__,_| | |_____/|_____|_| \_|  |_|   | |
+   __/ |  \_\    /_/                      \_\                         /_/ 
+  |___/                                                                   
 by 0xHarambehacks
     """
     print(art)
 
 print_ascii_art()
 
+#Usage: python3 gorillasint.py -phonebook phonebook.txt -crosslinked "{first}.{last}@company.com" "Company Name from Linkedin" crosslinked_output -d company.com -whois -pymeta -amass -dehashed
+# Set the file locations for dehashed.py and pymeta.py
+DEHASHED_SCRIPT_PATH = "/path/to/dehashed.py"  # Set the path to dehashed.py
+PYMETA_SCRIPT_PATH = "/path/to/pymeta.py"  # Set the path to pymeta.py
+
+# Spinner Class
+class Spinner:
+    busy = False
+    delay = 0.1
+
+    @staticmethod
+    def spinning_cursor():
+        while True:
+            for cursor in '|/-\\':
+                yield cursor
+
+    def __init__(self, message):
+        self.spinner_generator = self.spinning_cursor()
+        self.message = message
+
+    def spinner_task(self):
+        while self.busy:
+            sys.stdout.write(f"\r{self.message} {next(self.spinner_generator)}")
+            sys.stdout.flush()
+            time.sleep(self.delay)
+
+    def start(self):
+        self.busy = True
+        threading.Thread(target=self.spinner_task).start()
+
+    def stop(self):
+        self.busy = False
+        sys.stdout.write(f"\r{self.message} Done!\n")
+        sys.stdout.flush()
+
 def run_dehashed(domain, base_output_file):
     """Run dehashed.py with the provided domain and return the cracked and hash output files."""
-    command = f"python3 /mnt/c/Tools/dehashed.py -d {domain} -o {base_output_file}"
-    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    spinner = Spinner("Running dehashed...")
+    spinner.start()
     
-    if result.returncode != 0:
-        print(f"Error running dehashed.py: {result.stderr.decode('utf-8')}")
+    command = f"python3 {DEHASHED_SCRIPT_PATH} -d {domain} -o {base_output_file}"
+    subprocess.run(command, shell=True)
     
+    spinner.stop()
+
     cracked_file = f"{base_output_file}_cracked.txt"
     hashes_file = f"{base_output_file}_hashes.txt"
+
     if not os.path.exists(cracked_file):
         raise FileNotFoundError(f"Dehashed cracked file '{cracked_file}' was not created. Check if dehashed.py ran correctly.")
     
@@ -61,19 +102,53 @@ def run_dehashed(domain, base_output_file):
 
 def run_crosslinked(format_str, company_name, output_file):
     """Run crosslinked with the provided format and company name."""
-    output_file_with_ext = output_file + ".txt"
+    spinner = Spinner("Running crosslinked...")
+    spinner.start()
 
+    output_file_with_ext = output_file if output_file.endswith(".txt") else output_file + ".txt"
     command = f'crosslinked -f "{format_str}" "{company_name}" -o {output_file}'
     subprocess.run(command, shell=True)
+
+    spinner.stop()
 
     if not os.path.exists(output_file_with_ext):
         raise FileNotFoundError(f"Crosslinked output file '{output_file_with_ext}' was not created. Check if crosslinked ran correctly.")
     
     return output_file_with_ext
 
+def run_whois(domain):
+    """Run whois on the given domain and save output to whois_results.txt."""
+    spinner = Spinner("Running whois...")
+    spinner.start()
+
+    with open("whois_results.txt", "w") as outfile:
+        subprocess.run(f"whois {domain}", shell=True, stdout=outfile)
+
+    spinner.stop()
+
+def run_amass(domain):
+    """Run amass on the given domain and save output to amass_results.txt."""
+    spinner = Spinner("Running amass...")
+    spinner.start()
+
+    with open("amass_results.txt", "w") as outfile:
+        subprocess.run(f"amass enum -d {domain}", shell=True, stdout=outfile)
+
+    spinner.stop()
+
+def run_pymeta(domain):
+    """Run pymeta.py on the given domain and save output to pymeta_results.txt."""
+    spinner = Spinner("Running pymeta.py...")
+    spinner.start()
+
+    with open("pymeta_results.txt", "w") as outfile:
+        subprocess.run(f"python3 {PYMETA_SCRIPT_PATH} -d {domain}", shell=True, stdout=outfile)
+
+    spinner.stop()
+
 def extract_emails_from_file(file_path):
     """Extracts all emails from the given file."""
-    emails = set()  
+    emails = set()  # Use a set for deduplication
     with open(file_path, 'r') as f:
         for line in f:
             emails_in_line = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', line)
@@ -84,7 +159,7 @@ def extract_usernames(emails):
     """Extract usernames by removing domain part from email."""
     usernames = set()
     for email in emails:
-        username = email.split('@')[0]  
+        username = email.split('@')[0]  # Get the part before the '@'
         usernames.add(username)
     return usernames
 
@@ -95,7 +170,7 @@ def extract_passwords_and_hashes(cracked_file, hashes_file):
 
     with open(cracked_file, 'r') as f:
         for line in f:
-            passwords.add(line.strip())  
+            passwords.add(line.strip())
 
     with open(hashes_file, 'r') as f:
         for line in f:
@@ -114,11 +189,17 @@ def save_to_file(data, file_path):
 def main():
     parser = argparse.ArgumentParser(description="Combine OSINT tool outputs into a single file.")
     
+    parser.add_argument('-d', required=True, help="Domain to be used with the tools")
     parser.add_argument('-phonebook', required=True, help="Input file from phonebook.cz")
     parser.add_argument('-crosslinked', nargs=3, help="Arguments for crosslinked: format_str, company_name, output_file")
-    parser.add_argument('-dehashed', help="Domain for running dehashed.py")
+    parser.add_argument('-dehashed', action='store_true', help="Run dehashed.py on the domain")
+    parser.add_argument('-whois', action='store_true', help="Run whois on the domain")
+    parser.add_argument('-amass', action='store_true', help="Run amass on the domain")
+    parser.add_argument('-pymeta', action='store_true', help="Run pymeta.py on the domain")
 
     args = parser.parse_args()
+
+    domain = args.d
 
     all_emails = set()
     all_usernames = set()
@@ -135,13 +216,22 @@ def main():
         all_emails.update(crosslinked_emails)
 
     if args.dehashed:
-        cracked_file, hashes_file = run_dehashed(args.dehashed, "dehashed_output")
-        dehashed_emails = extract_emails_from_file(cracked_file)  # Assuming emails may be in the cracked file
+        cracked_file, hashes_file = run_dehashed(domain, "dehashed_output")
+        dehashed_emails = extract_emails_from_file(cracked_file)
         all_emails.update(dehashed_emails)
 
         passwords, hashes = extract_passwords_and_hashes(cracked_file, hashes_file)
         all_passwords.update(passwords)
         all_hashes.update(hashes)
+
+    if args.whois:
+        run_whois(domain)
+    
+    if args.amass:
+        run_amass(domain)
+
+    if args.pymeta:
+        run_pymeta(domain)
 
     all_usernames = extract_usernames(all_emails)
 
@@ -151,6 +241,7 @@ def main():
     save_to_file(all_hashes, "hashes.txt")
 
     print("OSINT data processing completed. Files saved: emails.txt, usernames.txt, passwords.txt, hashes.txt")
+    print("Additional results saved to: whois_results.txt, amass_results.txt, pymeta_results.txt (if applicable).")
 
 if __name__ == "__main__":
     main()

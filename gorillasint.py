@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+import shutil
 
 def print_ascii_art():
     art = """
@@ -48,6 +49,7 @@ print_ascii_art()
 # Set the file locations for dehashed.py and pymeta.py
 DEHASHED_SCRIPT_PATH = "/path/to/dehashed.py"  # Set the path to dehashed.py
 PYMETA_SCRIPT_PATH = "/path/to/pymeta.py"  # Set the path to pymeta.py
+PHONEBOOK_SCRIPT_PATH = "/path/to/phonebook.py" # Set the path to phonebook.py
 
 # Spinner Class
 class Spinner:
@@ -180,6 +182,47 @@ def extract_passwords_and_hashes(cracked_file, hashes_file):
 
     return passwords, hashes
 
+def run_phonebook(domain):
+    """ Run phonebook.py with the provided domain and save output to file. """
+    spinner = Spinner("Running phonebook.py...")
+    spinner.start()
+
+    with open("phonebook.txt", "w") as outfile:
+        command = f"python3 {PHONEBOOK_SCRIPT_PATH} -e -u {domain}"
+        subprocess.run(command, shell=True, stdout=outfile)
+
+    spinner.stop()
+
+def run_trevorspray(domain):
+    """Run trevorspray on the domain using emails.txt and enumerate valid users."""
+    spinner = Spinner("Running trevorspray...")
+    spinner.start()
+
+    command = f"trevorspray --recon {domain} -u emails.txt --threads 10"
+    process = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    stdout, stderr = process.communicate(input="onedrive\n")
+
+    spinner.stop()
+
+    if process.returncode != 0:
+        print(f"Error running trevorspray: {stderr}")
+    else:
+        print("onedrive_enum success!")
+
+        source_path = os.path.expanduser("~/.trevorspray/existent_users.txt")
+        destination_path = "valid_emails.txt"
+
+        if os.path.exists(source_path):
+            shutil.move(source_path, destination_path)
+            print(f"Valid emails saved to {destination_path}.")
+        else:
+            print("Error: Existent users file not found.")
+
+
+
+
+
+
 def save_to_file(data, file_path):
     """Save data to a file, one item per line."""
     with open(file_path, 'w') as f:
@@ -190,12 +233,13 @@ def main():
     parser = argparse.ArgumentParser(description="Combine OSINT tool outputs into a single file.")
     
     parser.add_argument('-d', required=True, help="Domain to be used with the tools")
-    parser.add_argument('-phonebook', required=True, help="Input file from phonebook.cz")
+    parser.add_argument('-phonebook', action='store_true', help="Run phonebook.py on the domain")
     parser.add_argument('-crosslinked', nargs=3, help="Arguments for crosslinked: format_str, company_name, output_file")
     parser.add_argument('-dehashed', action='store_true', help="Run dehashed.py on the domain")
     parser.add_argument('-whois', action='store_true', help="Run whois on the domain")
     parser.add_argument('-amass', action='store_true', help="Run amass on the domain")
     parser.add_argument('-pymeta', action='store_true', help="Run pymeta.py on the domain")
+    parser.add_argument('-enum_users', action='store_true', help="Run trevorspray to enumerate valid users and emails")
 
     args = parser.parse_args()
 
@@ -206,8 +250,6 @@ def main():
     all_passwords = set()
     all_hashes = set()
 
-    phonebook_emails = extract_emails_from_file(args.phonebook)
-    all_emails.update(phonebook_emails)
 
     if args.crosslinked:
         format_str, company_name, crosslinked_output = args.crosslinked
@@ -232,16 +274,27 @@ def main():
 
     if args.pymeta:
         run_pymeta(domain)
+    
+    if args.phonebook:
+        phonebook_file = "phonebook.txt"
+        run_phonebook(domain)
+        phonebook_emails = extract_emails_from_file(phonebook_file)
+        all_emails.update(phonebook_emails)
 
     all_usernames = extract_usernames(all_emails)
-
     save_to_file(all_emails, "emails.txt")
-    save_to_file(all_usernames, "usernames.txt")
     save_to_file(all_passwords, "passwords.txt")
     save_to_file(all_hashes, "hashes.txt")
 
+    if args.enum_users:
+        if os.path.exists("emails.txt"):
+            run_trevorspray(domain)
+        else:
+            raise FileNotFoundError("emails.txt not found. Ensure the script generates emails.txt")
+
+
     print("OSINT data processing completed. Files saved: emails.txt, usernames.txt, passwords.txt, hashes.txt")
-    print("Additional results saved to: whois_results.txt, amass_results.txt, pymeta_results.txt (if applicable).")
+    print("Additional results saved to: whois_results.txt, amass_results.txt, pymeta_results.txt, phonebook.txt, valid_emails.txt (if applicable).")
 
 if __name__ == "__main__":
     main()

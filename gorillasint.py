@@ -45,8 +45,8 @@ by 0xHarambehacks
 
 print_ascii_art()
 
-#Usage: python3 gorillasint.py -phonebook phonebook.txt -crosslinked "{first}.{last}@company.com" "Company Name from Linkedin" crosslinked_output -d company.com -whois -pymeta -amass -dehashed
-# Set the file locations for dehashed.py and pymeta.py
+#Usage: python3 gorillasint.py -phonebook -crosslinked "{first}.{last}@company.com" "Company Name from Linkedin" crosslinked_output -d company.com -whois -pymeta -amass -dehashed -enum_users
+# Set the file locations for dehashed.py and pymeta.py and phonebook.py
 DEHASHED_SCRIPT_PATH = "/path/to/dehashed.py"  # Set the path to dehashed.py
 PYMETA_SCRIPT_PATH = "/path/to/pymeta.py"  # Set the path to pymeta.py
 PHONEBOOK_SCRIPT_PATH = "/path/to/phonebook.py" # Set the path to phonebook.py
